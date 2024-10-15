@@ -1,0 +1,240 @@
+<!DOCTYPE html>
+<html lang="en">
+    <head>
+        <title>Luca Baggi - Semantic version validation in Helm charts</title>
+
+        <meta http-equiv="X-UA-Compatible" content="IE=edge">
+        <meta http-equiv="content-type" content="text/html; charset=utf-8">
+
+        <!-- Enable responsiveness on mobile devices-->
+        <!-- viewport-fit=cover is to support iPhone X rounded corners and notch in landscape-->
+        <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1, viewport-fit=cover">
+
+        <link rel="icon" type="image/png" sizes="32x32" href="https://lucabaggi.com/assets/favicon-32x32.png">
+        <link rel="icon" type="image/png" sizes="16x16" href="https://lucabaggi.com/assets/favicon-16x16.png">
+        <link rel="apple-touch-icon" sizes="180x180" href="https://lucabaggi.com/assets/apple-touch-icon.png">
+
+        <!-- Standard meta tags -->
+        <meta name="author" content="Luca Baggi">
+        
+
+        <!-- Open Graph Tags -->
+        <meta property="og:site_name" content="Luca Baggi">
+        
+        <meta property="og:title" content="Semantic version validation in Helm charts">
+        <meta property="og:url" content="https://lucabaggi.com/posts/helm-version-validation">
+        <meta property="og:description" content="">
+        
+        <meta property="og:type" content="article">
+        <meta property="article:published_time" content="2024-10-07">
+        
+        
+        <meta property="article:tags" content="helm"><meta property="article:tags" content="kubernetes"><meta property="article:tags" content="semver">
+        
+
+        <!-- CSS -->
+        <link rel="stylesheet" href="https://lucabaggi.com/main.css">
+
+        <!-- Feeds -->
+        
+
+        <!-- Google Analytics -->
+        <script async src="https://www.googletagmanager.com/gtag/js?id=G-L4DR5QK6C3"></script>
+        <script>
+            window.dataLayer = window.dataLayer || [];
+            function gtag(){dataLayer.push(arguments);}
+            gtag('js', new Date());
+            gtag('config', 'G-L4DR5QK6C3');
+        </script>
+    </head>
+    
+    <body class="single">
+
+    
+        <header class="header">
+            <nav class="nav">
+                
+                <p class="logo"><a href="https://lucabaggi.com">Luca Baggi</a></p>
+                
+                <ul class="menu">
+                    
+                    <li><a href="&#x2F;">About</a></li>
+                    
+                    <li><a href="&#x2F;posts">Posts</a></li>
+                    
+                </ul>
+            </nav>
+        </header>
+
+        <main class="main">
+            
+<article class="post-single">
+    <header class="post-header">
+        <div class="post-meta">
+            <span class="post-author">
+                Author: Luca Baggi
+            </span>
+            <br/>
+            <span class="post-date">Published: <time>October  7, 2024</time></span>
+            <span>&middot;</span>
+            <span class="post-reading-time">5 min read</span>
+        </div>
+        <h1 class="post-title">Semantic version validation in Helm charts</h1>
+    </header>
+    <div class="post-content"><p>In this post we're going to explore - with the help of a simple example - how we can make our Helm charts more robust, introducing a way to validate semantic versions. This kind of validation can be really helpful if you would like to control the features that can or cannot be used on a specific application distributed via Helm Charts.</p>
+<h2 id="overview">Overview</h2>
+<p>Helm is the de-facto standard package manager for Kubernetes, simplifying and automating the creation, distribution and deployment of Kubernetes applications through the so-called <strong>Helm Charts</strong>.</p>
+<p>Helm charts are composed of templates describing your Kubernetes applications and cluster's resources, like Deployments, Services, Network Policies and so on. These templates can be reused and customised via a <code>values.yaml</code> file, where users can put their own configuration values. </p>
+<p>Let's have a look at a template example:</p>
+<pre data-lang="yaml" style="background-color:#2b303b;color:#c0c5ce;" class="language-yaml "><code class="language-yaml" data-lang="yaml"><span style="color:#bf616a;">apiVersion</span><span>: </span><span style="color:#a3be8c;">apps/v1
+</span><span style="color:#bf616a;">kind</span><span>: </span><span style="color:#a3be8c;">Deployment
+</span><span style="color:#bf616a;">metadata</span><span>:
+</span><span>  </span><span style="color:#bf616a;">name</span><span>: </span><span style="color:#a3be8c;">my-deployment
+</span><span>  </span><span style="color:#bf616a;">labels</span><span>:
+</span><span>    </span><span style="color:#bf616a;">app</span><span>: </span><span style="color:#a3be8c;">my-deployment
+</span><span style="color:#bf616a;">spec</span><span>:
+</span><span>  </span><span style="color:#bf616a;">replicas</span><span>: {{ </span><span style="color:#a3be8c;">.Values.replicaCount </span><span>}}
+</span><span>  </span><span style="color:#bf616a;">selector</span><span>:
+</span><span>    </span><span style="color:#bf616a;">matchLabels</span><span>:
+</span><span>      </span><span style="color:#bf616a;">app</span><span>: </span><span style="color:#a3be8c;">my-deployment
+</span><span>  </span><span style="color:#bf616a;">template</span><span>:
+</span><span>    </span><span style="color:#bf616a;">metadata</span><span>:
+</span><span>      </span><span style="color:#bf616a;">labels</span><span>:
+</span><span>        </span><span style="color:#bf616a;">app</span><span>: </span><span style="color:#a3be8c;">my-deployment
+</span><span>    </span><span style="color:#bf616a;">spec</span><span>:
+</span><span>      </span><span style="color:#bf616a;">containers</span><span>:
+</span><span>        - </span><span style="color:#bf616a;">name</span><span>: </span><span style="color:#a3be8c;">nginx
+</span><span>          </span><span style="color:#bf616a;">image</span><span>: &quot;</span><span style="color:#a3be8c;">nginx:{{ .Values.image.version }}</span><span>&quot;
+</span><span>          </span><span style="color:#bf616a;">imagePullPolicy</span><span>: {{ </span><span style="color:#a3be8c;">.Values.image.pullPolicy </span><span>}}
+</span><span>          </span><span style="color:#bf616a;">ports</span><span>:
+</span><span>            - </span><span style="color:#bf616a;">name</span><span>: </span><span style="color:#a3be8c;">http
+</span><span>              </span><span style="color:#bf616a;">containerPort</span><span>: </span><span style="color:#d08770;">80
+</span><span>              </span><span style="color:#bf616a;">protocol</span><span>: </span><span style="color:#a3be8c;">TCP
+</span></code></pre>
+<p>This template is describing a <code>Deployment</code> resource with an <code>nginx</code> container, and it allows to customise:</p>
+<ul>
+<li>the replica count</li>
+<li>the nginx version to use</li>
+<li>the image pull policy</li>
+</ul>
+<p>How? Simply by defining a <code>values.yaml</code> file and setting a value for each <code>{{ .Values.xxx }}</code> entry:</p>
+<pre data-lang="yaml" style="background-color:#2b303b;color:#c0c5ce;" class="language-yaml "><code class="language-yaml" data-lang="yaml"><span style="color:#bf616a;">replicaCount</span><span>: </span><span style="color:#d08770;">1
+</span><span>
+</span><span style="color:#bf616a;">image</span><span>:
+</span><span>  </span><span style="color:#bf616a;">pullPolicy</span><span>: </span><span style="color:#a3be8c;">IfNotPresent
+</span><span>  </span><span style="color:#bf616a;">version</span><span>: &quot;</span><span style="color:#a3be8c;">1.16.0</span><span>&quot;
+</span></code></pre>
+<p>To render the template, you can run the <code>helm template</code> command and the resulting output will be the final k8s manifest describing the <code>Deployment</code> resource:</p>
+<pre data-lang="yaml" style="background-color:#2b303b;color:#c0c5ce;" class="language-yaml "><code class="language-yaml" data-lang="yaml"><span style="color:#bf616a;">apiVersion</span><span>: </span><span style="color:#a3be8c;">apps/v1
+</span><span style="color:#bf616a;">kind</span><span>: </span><span style="color:#a3be8c;">Deployment
+</span><span style="color:#bf616a;">metadata</span><span>:
+</span><span>  </span><span style="color:#bf616a;">name</span><span>: </span><span style="color:#a3be8c;">my-deployment
+</span><span>  </span><span style="color:#bf616a;">labels</span><span>:
+</span><span>    </span><span style="color:#bf616a;">app</span><span>: </span><span style="color:#a3be8c;">my-deployment
+</span><span style="color:#bf616a;">spec</span><span>:
+</span><span>  </span><span style="color:#bf616a;">replicas</span><span>: </span><span style="color:#d08770;">1
+</span><span>  </span><span style="color:#bf616a;">selector</span><span>:
+</span><span>    </span><span style="color:#bf616a;">matchLabels</span><span>:
+</span><span>      </span><span style="color:#bf616a;">app</span><span>: </span><span style="color:#a3be8c;">my-deployment
+</span><span>  </span><span style="color:#bf616a;">template</span><span>:
+</span><span>    </span><span style="color:#bf616a;">metadata</span><span>:
+</span><span>      </span><span style="color:#bf616a;">labels</span><span>:
+</span><span>        </span><span style="color:#bf616a;">app</span><span>: </span><span style="color:#a3be8c;">my-deployment
+</span><span>    </span><span style="color:#bf616a;">spec</span><span>:
+</span><span>      </span><span style="color:#bf616a;">containers</span><span>:
+</span><span>        - </span><span style="color:#bf616a;">name</span><span>: </span><span style="color:#a3be8c;">nginx
+</span><span>          </span><span style="color:#bf616a;">image</span><span>: &quot;</span><span style="color:#a3be8c;">nginx:1.16.0</span><span>&quot;
+</span><span>          </span><span style="color:#bf616a;">imagePullPolicy</span><span>: </span><span style="color:#a3be8c;">IfNotPresent
+</span><span>          </span><span style="color:#bf616a;">ports</span><span>:
+</span><span>            - </span><span style="color:#bf616a;">name</span><span>: </span><span style="color:#a3be8c;">http
+</span><span>              </span><span style="color:#bf616a;">containerPort</span><span>: </span><span style="color:#d08770;">80
+</span><span>              </span><span style="color:#bf616a;">protocol</span><span>: </span><span style="color:#a3be8c;">TCP
+</span></code></pre>
+<p>Easy, right?</p>
+<p>But what if we would like to make sure users won't be able to use nginx versions that are either too old (and may contain security vulnerabilities) or too new (that may contain breaking changes)? Luckily, Helm charts provide a <a href="https://helm.sh/docs/chart_template_guide/function_list/#semvercompare"><code>semverCompare</code></a> function we can leverage on. </p>
+<h2 id="semvercompare-function">semverCompare function</h2>
+<p>The <code>semverCompare</code> function can be used to compare semantic version values, using the following syntax:</p>
+<pre style="background-color:#2b303b;color:#c0c5ce;"><code><span>semverCompare &quot;&lt;condition&gt;&quot; &quot;&lt;semVerValue&gt;&quot;
+</span></code></pre>
+<p>The <code>condition</code> clause is very flexible, allowing us to use:</p>
+<ul>
+<li>basic comparisons, e.g. <code>&gt; 1.16.0</code> tells the function that the version must be greater than <code>1.16.0</code></li>
+<li>range comparisons, e.g. <code>1.16.0 - 2.0.0</code> tells the function that the version must be greater than <code>1.16.0</code> but lower than <code>2.0.0</code></li>
+<li>wildcards, using the <code>x</code>,<code>X</code> or <code>*</code> character: <code>&gt;= 1.2.x</code> is equivalent to <code>&gt;= 1.2.0</code></li>
+</ul>
+<p>For the full list of available features, have a look at the <a href="https://helm.sh/docs/chart_template_guide/function_list/#semvercompare">official docs</a>. </p>
+<p>This function is quite powerful, but how can we use it effectively in our Helm charts?</p>
+<h2 id="putting-it-all-toghether">Putting it all toghether</h2>
+<p>Helm charts allow to define helper files, also called <code>partials</code>: they have a <code>.tpl</code> extension, and they allow to define helper functions or parts of templates that then can be included and reused in multiple templates simply referencing them by name. </p>
+<p>Let's define a template partial validating <code>nginx</code> version in the default <code>_helpers.tpl</code> file:</p>
+<pre data-lang="yaml" style="background-color:#2b303b;color:#c0c5ce;" class="language-yaml "><code class="language-yaml" data-lang="yaml"><span style="color:#65737e;"># fail if nginx version set in values.yaml is lower than minimumVersion
+</span><span>{{- </span><span style="color:#a3be8c;">define &quot;nginx.versionValidation&quot; </span><span>}}
+</span><span>{{- </span><span style="color:#a3be8c;">$selectedVersion := . </span><span>}}
+</span><span>{{- </span><span style="color:#a3be8c;">$minimumVersion := &quot;1.16.0&quot; </span><span>}}
+</span><span>{{- </span><span style="color:#a3be8c;">$semverCompareCondition := printf &quot;&gt;= %s&quot; $minimumVersion </span><span>}}
+</span><span>{{- </span><span style="color:#a3be8c;">if not (semverCompare $semverCompareCondition $selectedVersion) </span><span>}}
+</span><span>{{- </span><span style="color:#a3be8c;">fail (printf &quot;Nginx version must be greater or equal than %s&quot; $minimumVersion) </span><span>}}
+</span><span>{{- </span><span style="color:#a3be8c;">end </span><span>}}
+</span><span>{{- </span><span style="color:#a3be8c;">$selectedVersion </span><span>}}
+</span><span>{{- </span><span style="color:#a3be8c;">end </span><span>}}
+</span></code></pre>
+<p>Let's break down the above code snippet:</p>
+<ul>
+<li>The first line (<code>{{- define &quot;nginx.versionValidation&quot; }}</code>) is defining the partial name: this means that other templates can include this partial using the <code>nginx.versionValidation</code> reference</li>
+<li>On the second line we set the <code>$selectedVersion</code> variable as the argument (<code>.</code>) passed when invoking this template partial, whereas on the third line we set the <code>$minimumVersion</code> variable to <code>1.16.0</code>, as we would like our version to be greater or equal than this minimum version. </li>
+<li>On lines 4-6 we setup the <code>semverCompare</code> condition with <code>&gt;= $minimumVersion</code>, and we invoke the <code>semverCompare</code> function: if it's not satisfied, we let it fail with a message error: <code>fail (printf &quot;Nginx version must be greater or equal than %s&quot; $minimumVersion)</code>. </li>
+<li>Finally, if instead the condition is satisfied, we print the <code>$selectedVersion</code> (line 8), which will be included in the template invoking this partial. </li>
+</ul>
+<p>Now, let's see how to include this helper inside our deployment template:</p>
+<pre data-lang="yaml" style="background-color:#2b303b;color:#c0c5ce;" class="language-yaml "><code class="language-yaml" data-lang="yaml"><span>...
+</span><span style="color:#bf616a;">spec</span><span>:
+</span><span>  </span><span style="color:#bf616a;">containers</span><span>:
+</span><span>    - </span><span style="color:#bf616a;">name</span><span>: </span><span style="color:#a3be8c;">nginx
+</span><span>      </span><span style="color:#bf616a;">image</span><span>: &quot;</span><span style="color:#a3be8c;">nginx:{{ include </span><span>&quot;</span><span style="color:#a3be8c;">nginx.versionValidation&quot; .Values.image.version }}&quot;
+</span><span>      </span><span style="color:#bf616a;">imagePullPolicy</span><span>: {{ </span><span style="color:#a3be8c;">.Values.image.pullPolicy </span><span>}}
+</span><span>...
+</span></code></pre>
+<p>As you can see, we used the <code>include</code> keyword followed by the partial name (<code>&quot;nginx.versionValidation&quot;</code>), and the argument to be passed to the partial - which is the version set by the user in the <code>values.yaml</code> file - <code>.Values.image.version</code>.</p>
+<p>So, what would happen now if we try to invoke <code>helm template</code> command setting a version lower than the one required? Let's give it a try! </p>
+<p>First of all we update our <code>values.yaml</code> with an invalid version, like this:</p>
+<pre data-lang="yaml" style="background-color:#2b303b;color:#c0c5ce;" class="language-yaml "><code class="language-yaml" data-lang="yaml"><span style="color:#bf616a;">replicaCount</span><span>: </span><span style="color:#d08770;">1
+</span><span>
+</span><span style="color:#bf616a;">image</span><span>:
+</span><span>  </span><span style="color:#bf616a;">pullPolicy</span><span>: </span><span style="color:#a3be8c;">IfNotPresent
+</span><span>  </span><span style="color:#65737e;"># The minimum required is 1.16.0
+</span><span>  </span><span style="color:#bf616a;">version</span><span>: &quot;</span><span style="color:#a3be8c;">1.15.0</span><span>&quot;
+</span></code></pre>
+<p>And then invoke the <code>helm template</code> command:</p>
+<pre data-lang="bash" style="background-color:#2b303b;color:#c0c5ce;" class="language-bash "><code class="language-bash" data-lang="bash"><span>&gt; helm </span><span style="color:#bf616a;">template</span><span> .
+</span><span style="color:#bf616a;">Error:</span><span> execution error at (nginx-helm-chart/templates/deployment.yaml:19:52)</span><span style="color:#96b5b4;">:</span><span> Nginx version must be greater or equal than 1.16.0
+</span><span>
+</span><span style="color:#bf616a;">Use --debug</span><span> flag to render out invalid YAML
+</span></code></pre>
+<p>As expected, the validation kicked in and prevented us from creating the k8s manifest! 🎉</p>
+<p>The full source code for this example is available on Github at <a href="https://github.com/lucabaggi/helm-semver-validation">this link</a>, along with another partial showing how to do a range validation. In one of the next posts, we'll see how we can write automated tests to make sure our Helm charts behave as expected, without the need to manually run the <code>helm template</code> command every time. Stay tuned! </p>
+</div>
+    <footer class="post-footer">
+        
+        <ul class="post-tags">
+        
+            <li><a href="https://lucabaggi.com/tags/helm/">helm</a></li>
+        
+            <li><a href="https://lucabaggi.com/tags/kubernetes/">kubernetes</a></li>
+        
+            <li><a href="https://lucabaggi.com/tags/semver/">semver</a></li>
+        
+        </ul>
+        </br>
+        
+        <nav class="pagination">
+            <!-- Docs state that page.lower and page.higher contain the pages with earlier and later dates, respectively. This seems to be the opposite so I inverted them-->
+            <a class="prev" href="https://lucabaggi.com/posts/welcome/">← Previous</a>
+            <!--Hidden Next-Button-->
+        </nav>
+    </footer>
+</article>
+
+        </main>
+    
+    </body>
+</html>
